@@ -26,10 +26,10 @@ dataset = TensorDataset(data_tensor[0:-1,:,:], data_tensor[1:,:,:]-data_tensor[0
 
 def data_generator(path: str):
     data = np.load(path)
-    pass
+    data = torch.from_numpy(data).float()
+    data = torch.reshape(data, (data.shape[0],1,data.shape[1])) 
+    dataset= TensorDataset(data[0:-1:,:,:], data[1:,:,:]-data[0:-1,:,:])
 
-
-# Parameters
 
 
 learning_rate=0.01
@@ -49,7 +49,7 @@ conv2_size=12
 kernel_size=10
 
 
-hidden_size = [10,1] 
+hidden_size = [10,100,1] 
 
 class CNN(nn.Module):
     def __init__(self):
@@ -60,14 +60,17 @@ class CNN(nn.Module):
         self.fc1 = nn.Linear((meshsize-2*(kernel_size-1))*conv2_size , 2048)                    # Fully connected layer 1
         self.fc2 = nn.Linear(2048, meshsize)                            # Fully connected layer 2 (output)
         self.linear1 = nn.Conv1d(1, hidden_size[0], 5, padding = 2, padding_mode = 'circular')
-        self.linear2 = nn.Linear(hidden_size[0],hidden_size[1])
+        self.linearx = []
+        self.linearx.append(nn.Linear(hidden_size[0],hidden_size[1]))
+        self.linearx.append(nn.Linear(hidden_size[1],hidden_size[2]))
 
     def forward(self, x):
 #        print(f" ##### {x.shape}")
         x = self.linear1(x)
         x = x.permute(0, 2, 1)
-        x = F.tanh(x)
-        x = self.linear2(x)
+        for i in range(len(self.linearx)):
+           x = F.tanh(x)
+           x = self.linearx[i](x)
         x = x.permute(0, 2, 1)
         #x = tanh(par1*a+par2*b)
         
@@ -133,14 +136,47 @@ def train(model, device, train_loader, optimizer, epoch):
     return avg_loss
 
 # Train the network and record the average loss for each epoch
-num_epochs = 1000
+num_epochs = 100
 epoch_loss_history = []
 
 for epoch in range(1, num_epochs + 1):
     avg_loss = train(model, device, train_loader, optimizer, epoch)
     epoch_loss_history.append(avg_loss)
 
+# Simple check
+
+print('Finished Training')
+print(f'\nError in one datapoint {torch.norm(data_tensor[9,:,:]+model(data_tensor[9:10,:,:])-data_tensor[10:11,:,:])/torch.norm(data_tensor[10,:,:])}')
+
 # Generate output data
+nout=10000
+output=torch.zeros((nout,data_tensor.shape[1],data_tensor.shape[2]))
+x=data_tensor[9:10,:,:]
+for j in range(nout):
+    x+=model(x)
+    output[j,:,:]=x
+
+output=torch.reshape(output.detach(),(output.shape[0],data_tensor.shape[2]))
+
+torch.transpose(output,0,1)
+output_vector=(output.detach().numpy()).astype(np.float64)
+
+
+# Save the NumPy array to an .npy file
+np.save('data/Task1/KS_X1prediction.npy', output_vector)
+
+# Plotting
+
+plt.imshow(data, cmap='viridis')  # 'viridis' is a common color map for visualizations
+plt.title('Training data')
+plt.colorbar()  # Show a color bar to indicate value mapping to color
+plt.show()
+
+
+plt.imshow(output_vector, cmap='viridis')  # 'viridis' is a common color map for visualizations
+plt.title('Predicted data')
+plt.colorbar()  # Show a color bar to indicate value mapping to color
+plt.show()
 
 
 
